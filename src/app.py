@@ -5,11 +5,17 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+from fastapi.security import OAuth2PasswordBearer
+from .models import get_db_engine, create_session, Admin
+from .auth import router as auth_router, create_access_token
+from jose import jwt, JWTError
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/admin/login")
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -83,9 +89,38 @@ def root():
     return RedirectResponse(url="/static/index.html")
 
 
+# include auth router
+app.include_router(auth_router)
+
+
+def get_current_admin(token: str = Depends(oauth2_scheme)) -> str:
+    """Return username of current admin or raise 401"""
+    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return username
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 @app.get("/activities")
 def get_activities():
     return activities
+
+
+@app.get("/admin/dashboard")
+def admin_dashboard(current_admin: str = Depends(get_current_admin)):
+    """Minimal protected dashboard endpoint returning simple stats."""
+    total_activities = len(activities)
+    total_participants = sum(len(a["participants"]) for a in activities.values())
+    return {
+        "admin": current_admin,
+        "total_activities": total_activities,
+        "total_participants": total_participants
+    }
 
 
 @app.post("/activities/{activity_name}/signup")
