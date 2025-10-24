@@ -1,4 +1,9 @@
-# Compiled source #
+__pycache__/
+.venv/
+data.db
+*.pyc
+/.pytest_cache
+env/# Compiled source #
 ###################
 *.com
 *.class
